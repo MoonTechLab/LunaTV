@@ -175,7 +175,7 @@ services:
 
 ### ☁️ Zeabur 部署（推荐）
 
-Thanks to @SzeMeng76
+Thanks to [@SzeMeng76](https://github.com/SzeMeng76)
 
 Zeabur 是一站式云端部署平台，使用预构建的 Docker 镜像可以快速部署，无需等待构建。
 

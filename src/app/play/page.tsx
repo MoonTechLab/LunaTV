@@ -718,8 +718,8 @@ function PlayPageClient() {
       setLoadingStage(currentSource && currentId ? 'fetching' : 'searching');
       setLoadingMessage(
         currentSource && currentId
-          ? '🎬 正在获取视频详情...'
-          : '🔍 正在搜索播放源...'
+          ? '🎬粤西柯某人正在爬取视频中，请耐心等待一下...'
+          : '🔍 粤西柯某人正在搜索播放源...'
       );
 
       let sourcesInfo = await fetchSourcesData(searchTitle || videoTitle);
@@ -747,7 +747,7 @@ function PlayPageClient() {
         if (target) {
           detailData = target;
         } else {
-          setError('未找到匹配结果');
+          setError('柯某人未找到匹配结果');
           setLoading(false);
           return;
         }
@@ -759,7 +759,7 @@ function PlayPageClient() {
         optimizationEnabled
       ) {
         setLoadingStage('preferring');
-        setLoadingMessage('⚡ 正在优选最佳播放源...');
+        setLoadingMessage('⚡粤西柯某人 正在积极优选最佳播放源...');
 
         detailData = await preferBestSource(sourcesInfo);
       }

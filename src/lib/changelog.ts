@@ -11,6 +11,32 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: "100.0.3",
+    date: "2025-10-27",
+    added: [
+      // 无新增内容
+    ],
+    changed: [
+      // 无变更内容
+    ],
+    fixed: [
+      "修复 webkit 下播放器控件的展示 bug"
+    ]
+  },
+  {
+    version: "100.0.2",
+    date: "2025-10-23",
+    added: [
+      // 无新增内容
+    ],
+    changed: [
+      // 无变更内容
+    ],
+    fixed: [
+      "修复 /api/search/resources 接口越权问题"
+    ]
+  },
+  {
     version: "100.0.1",
     date: "2025-09-25",
     added: [
@@ -19,7 +45,7 @@ export const changelog: ChangelogEntry[] = [
     changed: [
       // 无变更内容
     ],
-      fixed: [
+    fixed: [
       "修复错误的环境变量 ADMIN_USERNAME",
       "修复 bangumi 数据中没有图片导致首页崩溃问题"
     ]

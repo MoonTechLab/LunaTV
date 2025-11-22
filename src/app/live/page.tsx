@@ -892,7 +892,8 @@ function LivePageClient() {
       const targetUrl = `/api/proxy/m3u8?url=${encodeURIComponent(videoUrl)}&moontv-source=${currentSourceRef.current?.key || ''}`;
       try {
         // 创建新的播放器实例
-        Artplayer.USE_RAF = true;
+        Artplayer.USE_RAF = false;
+        Artplayer.FULLSCREEN_WEB_IN_BODY = true;
 
         artPlayerRef.current = new Artplayer({
           container: artRef.current,

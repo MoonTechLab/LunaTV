@@ -122,3 +122,7 @@ export interface SkipConfig {
   intro_time: number; // 片头时间（秒）
   outro_time: number; // 片尾时间（秒）
 }
+
+// 投屏相关类型导出
+export type { CastProtocol, CastState, CastDevice, CastMetadata, CastConfig, CastError, CastErrorType } from './casting/types';
+export { CastErrorType } from './casting/types';

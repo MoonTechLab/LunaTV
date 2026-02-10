@@ -19,6 +19,9 @@ import { parseCustomTimeFormat } from '@/lib/time';
 
 import EpgScrollableRow from '@/components/EpgScrollableRow';
 import PageLayout from '@/components/PageLayout';
+import CastingDeviceSelector from '@/components/CastingDeviceSelector';
+import { getCastingButtonHTML, getCastingButtonTooltip } from '@/components/CastingButton';
+import { useCasting } from '@/hooks/useCasting';
 
 // 扩展 HTMLVideoElement 类型以支持 hls 属性
 declare global {
@@ -216,6 +219,37 @@ function LivePageClient() {
   // 播放器引用
   const artPlayerRef = useRef<any>(null);
   const artRef = useRef<HTMLDivElement | null>(null);
+
+  // 投屏相关
+  const videoElementRef = useRef<HTMLVideoElement | null>(null);
+  const {
+    state: castState,
+    currentDevice: castCurrentDevice,
+    devices: castDevices,
+    isDeviceSelectorOpen,
+    scanDevices: castScanDevices,
+    connect: castConnect,
+    disconnect: castDisconnect,
+    closeDeviceSelector: castCloseDeviceSelector,
+    refreshDevices: castRefreshDevices,
+    toggleCasting: castToggleCasting,
+  } = useCasting(videoElementRef.current, videoUrl, currentChannel?.logo, currentChannel?.name);
+
+  // 更新投屏按钮
+  const updateCastingButton = () => {
+    if (artPlayerRef.current) {
+      const button = artPlayerRef.current.controls.get('cast') as any;
+      if (button) {
+        button.html = getCastingButtonHTML(castState, castCurrentDevice);
+        button.tooltip = getCastingButtonTooltip(castState, castCurrentDevice) as any;
+      }
+    }
+  };
+
+  // 监听投屏状态变化，更新按钮
+  useEffect(() => {
+    updateCastingButton();
+  }, [castState, castCurrentDevice]);
 
   // 分组标签滚动相关
   const groupContainerRef = useRef<HTMLDivElement>(null);
@@ -932,6 +966,17 @@ function LivePageClient() {
           },
           type: type,
           customType: customType,
+          controls: [
+            {
+              position: 'right',
+              index: 20,
+              html: getCastingButtonHTML(castState, castCurrentDevice),
+              tooltip: getCastingButtonTooltip(castState, castCurrentDevice) as any,
+              click: () => {
+                castToggleCasting();
+              },
+            },
+          ],
           icons: {
             loading:
               '<img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MCIgaGVpZ2h0PSI1MCIgdmlld0JveD0iMCAwIDUwIDUwIj48cGF0aCBkPSJNMjUuMjUxIDYuNDYxYy0xMC4zMTggMC0xOC42ODMgOC4zNjUtMTguNjgzIDE4LjY4M2g0LjA2OGMwLTguMDcgNi41NDUtMTQuNjE1IDE0LjYxNS0xNC42MTVWNi40NjF6IiBmaWxsPSIjMDA5Njg4Ij48YW5pbWF0ZVRyYW5zZm9ybSBhdHRyaWJ1dGVOYW1lPSJ0cmFuc2Zvcm0iIGF0dHJpYnV0ZVR5cGU9IlhNTCIgZHVyPSIxcyIgZnJvbT0iMCAyNSAyNSIgcmVwZWF0Q291bnQ9ImluZGVmaW5pdGUiIHRvPSIzNjAgMjUgMjUiIHR5cGU9InJvdGF0ZSIvPjwvcGF0aD48L3N2Zz4=">',
@@ -943,6 +988,10 @@ function LivePageClient() {
           setError(null);
           setIsVideoLoading(false);
 
+          // 捕获视频元素用于投屏
+          if (artPlayerRef.current && artPlayerRef.current.video) {
+            videoElementRef.current = artPlayerRef.current.video;
+          }
         });
 
         artPlayerRef.current.on('loadstart', () => {
@@ -1574,6 +1623,18 @@ function LivePageClient() {
           </div>
         )}
       </div>
+
+      {/* 投屏设备选择器 */}
+      <CastingDeviceSelector
+        isOpen={isDeviceSelectorOpen}
+        devices={castDevices}
+        currentDevice={castCurrentDevice}
+        state={castState}
+        onConnect={castConnect}
+        onDisconnect={castDisconnect}
+        onRefresh={castRefreshDevices}
+        onClose={castCloseDeviceSelector}
+      />
     </PageLayout>
   );
 }

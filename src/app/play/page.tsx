@@ -26,6 +26,9 @@ import { getVideoResolutionFromM3u8, processImageUrl } from '@/lib/utils';
 
 import EpisodeSelector from '@/components/EpisodeSelector';
 import PageLayout from '@/components/PageLayout';
+import CastingDeviceSelector from '@/components/CastingDeviceSelector';
+import { getCastingButtonHTML, getCastingButtonTooltip } from '@/components/CastingButton';
+import { useCasting } from '@/hooks/useCasting';
 
 // 扩展 HTMLVideoElement 类型以支持 hls 属性
 declare global {
@@ -205,6 +208,37 @@ function PlayPageClient() {
 
   // Wake Lock 相关
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
+
+  // 投屏相关
+  const videoElementRef = useRef<HTMLVideoElement | null>(null);
+  const {
+    state: castState,
+    currentDevice: castCurrentDevice,
+    devices: castDevices,
+    isDeviceSelectorOpen,
+    scanDevices: castScanDevices,
+    connect: castConnect,
+    disconnect: castDisconnect,
+    closeDeviceSelector: castCloseDeviceSelector,
+    refreshDevices: castRefreshDevices,
+    toggleCasting: castToggleCasting,
+  } = useCasting(videoElementRef.current, videoUrl, videoCover, videoTitle);
+
+  // 更新投屏按钮
+  const updateCastingButton = () => {
+    if (artPlayerRef.current) {
+      const button = artPlayerRef.current.controls.get('cast') as any;
+      if (button) {
+        button.html = getCastingButtonHTML(castState, castCurrentDevice);
+        button.tooltip = getCastingButtonTooltip(castState, castCurrentDevice) as any;
+      }
+    }
+  };
+
+  // 监听投屏状态变化，更新按钮
+  useEffect(() => {
+    updateCastingButton();
+  }, [castState, castCurrentDevice]);
 
   // -----------------------------------------------------------------------------
   // 工具函数（Utils）
@@ -1486,12 +1520,27 @@ function PlayPageClient() {
               handleNextEpisode();
             },
           },
+          {
+            name: 'cast',
+            position: 'right',
+            index: 20,
+            html: getCastingButtonHTML(castState, castCurrentDevice),
+            tooltip: '投屏',
+            click: function () {
+              castToggleCasting();
+            },
+          },
         ],
       });
 
       // 监听播放器事件
       artPlayerRef.current.on('ready', () => {
         setError(null);
+
+        // 获取 video 元素供投屏使用
+        if (artPlayerRef.current?.video) {
+          videoElementRef.current = artPlayerRef.current.video;
+        }
 
         // 播放器就绪后，如果正在播放则请求 Wake Lock
         if (artPlayerRef.current && !artPlayerRef.current.paused) {
@@ -2060,6 +2109,19 @@ function PlayPageClient() {
           </div>
         </div>
       </div>
+
+      {/* 投屏设备选择器 */}
+      <CastingDeviceSelector
+        isOpen={isDeviceSelectorOpen}
+        onClose={castCloseDeviceSelector}
+        devices={castDevices}
+        currentDevice={castCurrentDevice}
+        castState={castState}
+        onConnect={castConnect}
+        onDisconnect={castDisconnect}
+        onRefresh={castRefreshDevices}
+        onScanStart={() => castScanDevices()}
+      />
     </PageLayout>
   );
 }

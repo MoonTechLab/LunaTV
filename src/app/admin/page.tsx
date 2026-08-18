@@ -1139,7 +1139,14 @@ const UserConfig = ({ config, role, refreshConfig }: UserConfigProps) => {
                           )}
                         </td>
                         <td className='px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100'>
-                          {user.username}
+                          <div className='flex items-center gap-2'>
+                            <span>{user.username}</span>
+                            {user.from === 'oidc' && (
+                              <span className='px-1.5 py-0.5 text-[10px] rounded-full bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300'>
+                                OIDC
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className='px-6 py-4 whitespace-nowrap'>
                           <span

@@ -360,6 +360,8 @@ export function configSelfCheck(adminConfig: AdminConfig): AdminConfig {
     banned: false,
     enabledApis: originOwnerCfg?.enabledApis || undefined,
     tags: originOwnerCfg?.tags || undefined,
+    from: originOwnerCfg?.from,
+    oidcSub: originOwnerCfg?.oidcSub,
   });
 
   // 采集源去重

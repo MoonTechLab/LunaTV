@@ -25,6 +25,8 @@ export interface AdminConfig {
       banned?: boolean;
       enabledApis?: string[]; // 优先级高于tags限制
       tags?: string[]; // 多 tags 取并集限制
+      from?: 'local' | 'oidc';
+      oidcSub?: string;
     }[];
     Tags?: {
       name: string;

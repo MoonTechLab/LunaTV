@@ -36,6 +36,7 @@
     "framer-motion": "^12.18.1",
     "he": "^1.2.0",
     "hls.js": "^1.6.10",
+    "jose": "5.10.0",
     "lucide-react": "^0.438.0",
     "media-icons": "^1.1.5",
     "next": "^14.2.23",

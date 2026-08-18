@@ -341,6 +341,28 @@ dockge/komodo 等 docker compose UI 也有自动更新功能
 | NEXT_PUBLIC_DOUBAN_IMAGE_PROXY      | 自定义豆瓣图片代理 URL                       | url prefix                       | (空)                                                                                                                       |
 | NEXT_PUBLIC_DISABLE_YELLOW_FILTER   | 关闭色情内容过滤                             | true/false                       | false                                                                                                                      |
 | NEXT_PUBLIC_FLUID_SEARCH | 是否开启搜索接口流式输出 | true/ false | true |
+| OIDC_ISSUER | OIDC 发行方地址（配置后自动启用 OIDC） | `https://auth.example.com` 或完整 discovery URL | 空（不启用） |
+| OIDC_CLIENT_ID | OIDC 客户端 ID | 字符串 | 空 |
+| OIDC_CLIENT_SECRET | OIDC 客户端密钥（机密客户端需要） | 字符串 | 空 |
+| OIDC_REDIRECT_URI | OIDC 回调地址 | 完整 URL | `{SITE_BASE}/api/oidc/callback` |
+| OIDC_SCOPES | OIDC 授权范围 | 空格分隔 | `openid profile email` |
+| OIDC_USERNAME_CLAIM | 映射到 LunaTV 用户名的 claim | `preferred_username` / `email` / `sub` 等 | `preferred_username` |
+| OIDC_AUTO_REGISTER | 首次 OIDC 登录是否自动创建本地用户 | true/false | true |
+| OIDC_DISABLE_PASSWORD | 启用 OIDC 后是否隐藏账号密码登录 | true/false | false |
+| OIDC_BUTTON_TEXT | 登录页 OIDC 按钮文案 | 任意字符串 | OIDC 登录 |
+| OIDC_ENABLED | 强制开关（一般无需设置） | true/false | 配置了 ISSUER + CLIENT_ID 即为 true |
+| OIDC_CLIENT_AUTH | 令牌端点客户端认证方式 | basic / post / none | 按 IdP 发现文档自动选择，缺省 post |
+
+OIDC 说明：
+
+- **仅支持** `redis` / `kvrocks` / `upstash` 多用户存储，不支持 `localstorage` 单密码模式
+- 请在身份提供方登记回调地址：`https://你的站点/api/oidc/callback`，并设置相同的 `SITE_BASE` 或 `OIDC_REDIRECT_URI`。反代 / HTTPS / 非 localhost 访问时必须显式配置，否则换票会因回调地址不一致失败
+- 机密客户端必须配置 `OIDC_CLIENT_SECRET`。若 IdP 只接受 Basic 认证，可设 `OIDC_CLIENT_AUTH=basic`
+- OIDC 用户会进入现有用户系统：可在管理面板封禁、提权、分配用户组；收藏和播放记录按用户名同步
+- 用户名优先取 `OIDC_USERNAME_CLAIM`，缺省回退 `preferred_username` → `email` → `name` → `sub`
+- 若解析出的用户名等于 `USERNAME`，将以站长身份登录
+- 已存在的同名本地用户会自动绑定 OIDC `sub`，之后即使 IdP 用户名变更也按 `sub` 识别
+- 建议把用户范围限制在可信 IdP 内；若只允许预创建账号登录，设置 `OIDC_AUTO_REGISTER=false`
 
 NEXT_PUBLIC_DOUBAN_PROXY_TYPE 选项解释：
 

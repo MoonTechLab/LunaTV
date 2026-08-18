@@ -11,6 +11,19 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: "100.1.4",
+    date: "2026-08-18",
+    added: [
+    "支持标准 OIDC 登录，并映射到现有用户系统（收藏、播放记录、角色权限保持不变）"
+    ],
+    changed: [
+      // 无变更内容
+    ],
+    fixed: [
+      // 无修复内容
+    ]
+  },
+  {
     version: "100.1.3",
     date: "2026-05-28",
     added: [

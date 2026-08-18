@@ -26,6 +26,7 @@ import { VersionPanel } from './VersionPanel';
 interface AuthInfo {
   username?: string;
   role?: 'owner' | 'admin' | 'user';
+  authMethod?: 'password' | 'oidc';
 }
 
 export const UserMenu: React.FC = () => {
@@ -460,7 +461,9 @@ export const UserMenu: React.FC = () => {
 
   // 检查是否显示修改密码按钮
   const showChangePassword =
-    authInfo?.role !== 'owner' && storageType !== 'localstorage';
+    authInfo?.role !== 'owner' &&
+    storageType !== 'localstorage' &&
+    authInfo?.authMethod !== 'oidc';
 
   // 角色中文映射
   const getRoleText = (role?: string) => {

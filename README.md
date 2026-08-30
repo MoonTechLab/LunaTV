@@ -43,9 +43,13 @@
 
 - [技术栈](#技术栈)
 - [部署](#部署)
+  - [一键部署](#zeabur-一键部署)
+  - [Docker 部署](#Kvrocks-存储推荐)
 - [配置文件](#配置文件)
+- [订阅](#订阅)
 - [自动更新](#自动更新)
 - [环境变量](#环境变量)
+- [客户端](#客户端)
 - [AndroidTV 使用](#AndroidTV-使用)
 - [Roadmap](#roadmap)
 - [安全与隐私提醒](#安全与隐私提醒)
@@ -66,6 +70,20 @@
 ## 部署
 
 本项目**仅支持 Docker 或其他基于 Docker 的平台** 部署。
+
+### zeabur 一键部署
+
+点击下方按钮即可一键部署，自动配置 LunaTV + Kvrocks 数据库：
+
+[![Deploy on Zeabur](https://zeabur.com/button.svg)](https://zeabur.com/templates/8MPTQU/deploy)
+
+**优势**：
+- ✅ 无需配置，一键启动（自动部署完整环境）
+- ✅ 自动 HTTPS 和全球 CDN 加速
+- ✅ 持久化存储，数据永不丢失
+- ✅ 免费额度足够个人使用
+
+**⚠️ 重要提示**：部署完成后，需要在 Zeabur 中为 LunaTV 服务设置访问域名（Domain）才能在浏览器中访问。详见下方 [设置访问域名](#5-设置访问域名必须) 步骤。
 
 ### Kvrocks 存储（推荐）
 
@@ -155,6 +173,96 @@ services:
       - UPSTASH_TOKEN=上面的 TOKEN
 ```
 
+### ☁️ Zeabur 部署（推荐）
+
+Thanks to @SzeMeng76
+
+Zeabur 是一站式云端部署平台，使用预构建的 Docker 镜像可以快速部署，无需等待构建。
+
+**部署步骤：**
+
+1. **添加 KVRocks 服务**（先添加数据库）
+   - 点击 "Add Service" > "Docker Images"
+   - 输入镜像名称：`apache/kvrocks`
+   - 配置端口：`6666` (TCP)
+   - **记住服务名称**（通常是 `apachekvrocks`）
+   - **配置持久化卷（重要）**：
+     * 在服务设置中找到 "Volumes" 部分
+     * 点击 "Add Volume" 添加新卷
+     * Volume ID: `kvrocks-data`（可自定义，仅支持字母、数字、连字符）
+     * Path: `/var/lib/kvrocks/db`
+     * 保存配置
+
+   > 💡 **重要提示**：持久化卷路径必须设置为 `/var/lib/kvrocks/db`（KVRocks 数据目录），这样配置文件保留在容器内，数据库文件持久化，重启后数据不会丢失！
+
+2. **添加 LunaTV 服务**
+   - 点击 "Add Service" > "Docker Images"
+   - 输入镜像名称：`ghcr.io/moontechlab/lunatv:latest`
+   - 配置端口：`3000` (HTTP)
+
+3. **配置环境变量**
+
+   在 LunaTV 服务的环境变量中添加：
+
+   ```env
+   # 必填：管理员账号
+   USERNAME=admin
+   PASSWORD=your_secure_password
+
+   # 必填：存储配置
+   NEXT_PUBLIC_STORAGE_TYPE=kvrocks
+   KVROCKS_URL=redis://apachekvrocks:6666
+
+   # 可选：站点配置
+   SITE_BASE=https://your-domain.zeabur.app
+   NEXT_PUBLIC_SITE_NAME=LunaTV Enhanced
+   ANNOUNCEMENT=欢迎使用 LunaTV Enhanced Edition
+
+   # 可选：豆瓣代理配置（推荐）
+   NEXT_PUBLIC_DOUBAN_PROXY_TYPE=cmliussss-cdn-tencent
+   NEXT_PUBLIC_DOUBAN_IMAGE_PROXY_TYPE=cmliussss-cdn-tencent
+   ```
+
+   **注意**：
+   - 使用服务名称作为主机名：`redis://apachekvrocks:6666`
+   - 如果服务名称不同，请替换为实际名称
+   - 两个服务必须在同一个 Project 中
+
+4. **部署完成**
+   - Zeabur 会自动拉取镜像并启动服务
+   - 等待服务就绪后，需要手动设置访问域名（见下一步）
+
+#### 5. 设置访问域名（必须）
+
+   - 在 LunaTV 服务页面，点击 "Networking" 或 "网络" 标签
+   - 点击 "Generate Domain" 生成 Zeabur 提供的免费域名（如 `xxx.zeabur.app`）
+   - 或者绑定自定义域名：
+     * 点击 "Add Domain" 添加你的域名
+     * 按照提示配置 DNS CNAME 记录指向 Zeabur 提供的目标地址
+   - 设置完域名后即可通过域名访问 LunaTV
+
+6. **绑定自定义域名（可选）**
+   - 在服务设置中点击 "Domains"
+   - 添加你的自定义域名
+   - 配置 DNS CNAME 记录指向 Zeabur 提供的域名
+
+#### 🔄 更新 Docker 镜像
+
+当 Docker 镜像有新版本发布时，Zeabur 不会自动更新。需要手动触发更新。
+
+**更新步骤：**
+
+1. **进入服务页面**
+   - 点击需要更新的服务（LunaTV 或 KVRocks）
+
+2. **重启服务**
+   - 点击 **"服务状态"** 页面，再点击 **"重启当前版本"** 按钮
+   - Zeabur 会自动拉取最新的 `latest` 镜像并重新部署
+
+> 💡 **提示**：
+> - 使用 `latest` 标签时，Restart 会自动拉取最新镜像
+> - 生产环境推荐使用固定版本标签（如 `v5.5.6`）避免意外更新
+
 ## 配置文件
 
 完成部署后为空壳应用，无播放源，需要站长在管理后台的配置文件设置中填写配置文件（后续会支持订阅）
@@ -202,6 +310,10 @@ custom_category 支持的自定义分类已知如下：
 
 MoonTV 支持标准的苹果 CMS V10 API 格式。
 
+## 订阅
+
+将完整的配置文件 base58 编码后提供 http 服务即为订阅链接，可在 MoonTV 后台/Helios 中使用。
+
 ## 自动更新
 
 可借助 [watchtower](https://github.com/containrrr/watchtower) 自动更新镜像容器
@@ -246,6 +358,10 @@ NEXT_PUBLIC_DOUBAN_IMAGE_PROXY_TYPE 选项解释：
 - cmliussss-cdn-tencent：由浏览器请求豆瓣 CDN，该 CDN 由 [CMLiussss](https://github.com/cmliu) 搭建，并由腾讯云 cdn 提供加速
 - cmliussss-cdn-ali：由浏览器请求豆瓣 CDN，该 CDN 由 [CMLiussss](https://github.com/cmliu) 搭建，并由阿里云 cdn 提供加速
 - custom: 用户自定义 proxy，由 NEXT_PUBLIC_DOUBAN_IMAGE_PROXY 定义
+
+## 客户端
+
+v100.0.0 以上版本可配合 [Selene](https://github.com/MoonTechLab/Selene) 使用，移动端体验更加友好，数据完全同步
 
 ## AndroidTV 使用
 

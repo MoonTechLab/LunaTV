@@ -179,13 +179,7 @@ export async function DELETE(request: NextRequest) {
       await db.deleteFavorite(username, source, id);
     } else {
       // 清空全部
-      const all = await db.getAllFavorites(username);
-      await Promise.all(
-        Object.keys(all).map(async (k) => {
-          const [s, i] = k.split('+');
-          if (s && i) await db.deleteFavorite(username, s, i);
-        })
-      );
+      await db.deleteAllFavorites(username);
     }
 
     return NextResponse.json({ success: true }, { status: 200 });

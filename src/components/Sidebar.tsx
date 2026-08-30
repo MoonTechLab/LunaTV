@@ -145,24 +145,35 @@ const Sidebar = ({ onToggle, activePath = '/' }: SidebarProps) => {
       label: '综艺',
       href: '/douban?type=show',
     },
-    {
-      icon: Radio,
-      label: '直播',
-      href: '/live',
-    },
   ]);
 
   useEffect(() => {
     const runtimeConfig = (window as any).RUNTIME_CONFIG;
+    if (runtimeConfig?.ENABLE_WEB_LIVE) {
+      setMenuItems((prevItems) => {
+        if (prevItems.some((item) => item.href === '/live')) return prevItems;
+        return [
+          ...prevItems,
+          {
+            icon: Radio,
+            label: '直播',
+            href: '/live',
+          },
+        ];
+      });
+    }
     if (runtimeConfig?.CUSTOM_CATEGORIES?.length > 0) {
-      setMenuItems((prevItems) => [
-        ...prevItems,
-        {
-          icon: Star,
-          label: '自定义',
-          href: '/douban?type=custom',
-        },
-      ]);
+      setMenuItems((prevItems) => {
+        if (prevItems.some((item) => item.href === '/douban?type=custom')) return prevItems;
+        return [
+          ...prevItems,
+          {
+            icon: Star,
+            label: '自定义',
+            href: '/douban?type=custom',
+          },
+        ];
+      });
     }
   }, []);
 

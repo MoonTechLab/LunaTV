@@ -195,18 +195,20 @@ function main() {
 
     fs.writeFileSync(outputPath, tsContent, 'utf-8');
 
+    // 读取 VERSION.txt 并同步到 version.ts
+    const versionTxtPath = path.join(process.cwd(), 'VERSION.txt');
+    const versionFromFile = fs.readFileSync(versionTxtPath, 'utf8').trim();
+    console.log(`📄 VERSION.txt 版本: ${versionFromFile}`);
+    updateVersionTs(versionFromFile);
+
     // 检查是否在 GitHub Actions 环境中运行
     const isGitHubActions = process.env.GITHUB_ACTIONS === 'true';
 
     if (isGitHubActions) {
-      // 在 GitHub Actions 中，更新版本文件
-      console.log('正在更新版本文件...');
+      // 在 GitHub Actions 中，更新 VERSION.txt 为 CHANGELOG 最新版本
+      console.log('正在更新 VERSION.txt...');
       updateVersionFile(latestVersion);
       updateVersionTs(latestVersion);
-    } else {
-      // 在本地运行时，只提示但不更新版本文件
-      console.log('🔧 本地运行模式：跳过版本文件更新');
-      console.log('💡 版本文件更新将在 git tag 触发的 release 工作流中完成');
     }
 
     console.log(`✅ 成功生成 ${outputPath}`);

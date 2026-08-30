@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: lunatv-redis
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lunatv-app
+    ports:
+      - '3000:3000'
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      # 存储类型：使用 redis
+      - NEXT_PUBLIC_STORAGE_TYPE=redis
+      # Redis 连接地址（容器内通过 service name 访问）
+      - REDIS_URL=redis://redis:6379
+      # 站长账号
+      - USERNAME=admin
+      # 站长密码
+      - PASSWORD=admin123
+      # 站点名称（可选）
+      - NEXT_PUBLIC_SITE_NAME=MoonTV
+
+volumes:
+  redis-data:

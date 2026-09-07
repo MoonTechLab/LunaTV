@@ -95,20 +95,8 @@ export async function GET(request: Request) {
 }
 
 function rewriteM3U8Content(content: string, baseUrl: string, req: Request, allowCORS: boolean) {
-  // 从 referer 头提取协议信息
-  const referer = req.headers.get('referer');
-  let protocol = 'http';
-  if (referer) {
-    try {
-      const refererUrl = new URL(referer);
-      protocol = refererUrl.protocol.replace(':', '');
-    } catch (error) {
-      // ignore
-    }
-  }
-
-  const host = req.headers.get('host');
-  const proxyBase = `${protocol}://${host}/api/proxy`;
+  const requestUrl = new URL(req.url);
+  const proxyBase = `${requestUrl.protocol}//${requestUrl.host}/api/proxy`;
 
   const lines = content.split('\n');
   const rewrittenLines: string[] = [];

@@ -22,7 +22,7 @@ export async function GET(request: Request) {
   const ua = liveSource.ua || 'AptvPlayer/1.4.10';
 
   try {
-    const decodedUrl = decodeURIComponent(url);
+    const decodedUrl = url;
     console.log(decodedUrl);
     const response = await fetch(decodedUrl, {
       headers: {

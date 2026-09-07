@@ -27,8 +27,7 @@ export async function GET(request: Request) {
   let responseUsed = false;
 
   try {
-    const decodedUrl = decodeURIComponent(url);
-
+    const decodedUrl = url;
     response = await fetch(decodedUrl, {
       cache: 'no-cache',
       redirect: 'follow',

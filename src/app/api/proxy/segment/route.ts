@@ -25,7 +25,7 @@ export async function GET(request: Request) {
   let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
 
   try {
-    const decodedUrl = decodeURIComponent(url);
+    const decodedUrl = url;
     response = await fetch(decodedUrl, {
       headers: {
         'User-Agent': ua,

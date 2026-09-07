@@ -20,7 +20,7 @@ export async function GET(request: Request) {
   const ua = liveSource?.ua || 'AptvPlayer/1.4.10';
 
   try {
-    const decodedUrl = decodeURIComponent(imageUrl);
+    const decodedUrl = imageUrl;
     const imageResponse = await fetch(decodedUrl, {
       cache: 'no-cache',
       redirect: 'follow',

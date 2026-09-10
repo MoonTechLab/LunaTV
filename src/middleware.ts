@@ -35,13 +35,16 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // 其他模式：只验证签名
-  // 检查是否有用户名（非localStorage模式下密码不存储在cookie中）
-  if (!authInfo.username || !authInfo.signature) {
+  if (!authInfo.username || !authInfo.signature || !authInfo.timestamp) {
     return handleAuthFailure(request, pathname);
   }
-
-  // 验证签名（如果存在）
+  if (
+    typeof authInfo.timestamp !== 'number' ||
+    authInfo.timestamp > Date.now() + 300000 ||
+    Date.now() - authInfo.timestamp > 604800000
+  ) {
+    return handleAuthFailure(request, pathname);
+  }
   if (authInfo.signature) {
     const isValidSignature = await verifySignature(
       authInfo.username,

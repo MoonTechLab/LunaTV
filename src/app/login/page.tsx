@@ -85,6 +85,9 @@ function LoginPageClient() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [shouldAskUsername, setShouldAskUsername] = useState(false);
+  // ponytail: 注册开关由 /api/register 下发，默认关
+  const [registerOpen, setRegisterOpen] = useState(false);
+  const [mode, setMode] = useState<'login' | 'register'>('login');
 
   const { siteName } = useSite();
 
@@ -94,6 +97,10 @@ function LoginPageClient() {
       const storageType = (window as any).RUNTIME_CONFIG?.STORAGE_TYPE;
       setShouldAskUsername(storageType && storageType !== 'localstorage');
     }
+    fetch('/api/register')
+      .then((r) => r.json())
+      .then((d) => setRegisterOpen(!!d.open))
+      .catch(() => {});
   }, []);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -104,7 +111,9 @@ function LoginPageClient() {
 
     try {
       setLoading(true);
-      const res = await fetch('/api/login', {
+      // ponytail: 注册走 /api/register，成功后切回登录态
+      const url = mode === 'register' ? '/api/register' : '/api/login';
+      const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -114,6 +123,12 @@ function LoginPageClient() {
       });
 
       if (res.ok) {
+        if (mode === 'register') {
+          setMode('login');
+          setError(null);
+          setPassword('');
+          return;
+        }
         router.replace(sanitizeRedirect(searchParams.get('redirect')));
       } else {
         const data = await res.json().catch(() => ({}));
@@ -182,9 +197,48 @@ function LoginPageClient() {
             }
             className='inline-flex w-full justify-center rounded-lg bg-green-600 py-3 text-base font-semibold text-white shadow-lg transition-all duration-200 hover:from-green-600 hover:to-blue-600 disabled:cursor-not-allowed disabled:opacity-50'
           >
-            {loading ? '登录中...' : '登录'}
+            {loading
+              ? mode === 'register'
+                ? '注册中...'
+                : '登录中...'
+              : mode === 'register'
+                ? '注册'
+                : '登录'}
           </button>
         </form>
+        {registerOpen && (
+          <p className='mt-6 text-center text-sm text-gray-500 dark:text-gray-400'>
+            {mode === 'login' ? (
+              <>
+                还没有账号？
+                <button
+                  type='button'
+                  className='ml-1 font-semibold text-green-600 hover:underline'
+                  onClick={() => {
+                    setMode('register');
+                    setError(null);
+                  }}
+                >
+                  去注册
+                </button>
+              </>
+            ) : (
+              <>
+                已有账号？
+                <button
+                  type='button'
+                  className='ml-1 font-semibold text-green-600 hover:underline'
+                  onClick={() => {
+                    setMode('login');
+                    setError(null);
+                  }}
+                >
+                  去登录
+                </button>
+              </>
+            )}
+          </p>
+        )}
       </div>
 
       {/* 版本信息显示 */}

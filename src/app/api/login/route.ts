@@ -119,9 +119,9 @@ export async function POST(req: NextRequest) {
       // 验证成功，设置认证cookie
       const response = NextResponse.json({ ok: true });
       const cookieValue = await generateAuthCookie(
-        undefined,
+        process.env.USERNAME || 'local',
         password,
-        'user',
+        'owner',
         true
       ); // localstorage 模式包含 password
       const expires = new Date();

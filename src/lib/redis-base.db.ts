@@ -32,6 +32,7 @@ function createRetryWrapper(clientName: string, getClient: () => RedisClientType
   ): Promise<T> {
     for (let i = 0; i < maxRetries; i++) {
       try {
+        await ensureRedisReady(getClient(), clientName);
         return await operation();
       } catch (err: any) {
         const isLastAttempt = i === maxRetries - 1;
@@ -39,8 +40,14 @@ function createRetryWrapper(clientName: string, getClient: () => RedisClientType
           err.message?.includes('Connection') ||
           err.message?.includes('ECONNREFUSED') ||
           err.message?.includes('ENOTFOUND') ||
+          err.message?.includes('closed') ||
+          err.message?.includes('not open') ||
+          err.message?.includes('The client is closed') ||
+          err.message?.includes('ClientClosedError') ||
+          err.message?.includes('ready timeout') ||
           err.code === 'ECONNRESET' ||
-          err.code === 'EPIPE';
+          err.code === 'EPIPE' ||
+          err.code === 'NR_CLOSED';
 
         if (isConnectionError && !isLastAttempt) {
           console.log(
@@ -53,10 +60,7 @@ function createRetryWrapper(clientName: string, getClient: () => RedisClientType
 
           // 尝试重新连接
           try {
-            const client = getClient();
-            if (!client.isOpen) {
-              await client.connect();
-            }
+            await ensureRedisReady(getClient(), clientName);
           } catch (reconnectErr) {
             console.error('Failed to reconnect:', reconnectErr);
           }
@@ -70,6 +74,47 @@ function createRetryWrapper(clientName: string, getClient: () => RedisClientType
 
     throw new Error('Max retries exceeded');
   };
+}
+
+async function ensureRedisReady(
+  client: RedisClientType,
+  clientName: string
+): Promise<void> {
+  if (client.isReady) {
+    return;
+  }
+
+  if (!client.isOpen) {
+    try {
+      await client.connect();
+    } catch (connectErr: any) {
+      const msg = String(connectErr?.message || '');
+      if (!/already|OPEN|connecting/i.test(msg)) {
+        throw connectErr;
+      }
+    }
+  }
+
+  if (client.isReady) {
+    return;
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      client.off('ready', onReady);
+      reject(new Error(`${clientName} ready timeout`));
+    }, 8000);
+    const onReady = () => {
+      clearTimeout(timeout);
+      resolve();
+    };
+    client.once('ready', onReady);
+    if (client.isReady) {
+      clearTimeout(timeout);
+      client.off('ready', onReady);
+      resolve();
+    }
+  });
 }
 
 // 创建客户端的工厂函数
@@ -171,24 +216,40 @@ export abstract class BaseRedisStorage implements IStorage {
     key: string,
     record: PlayRecord
   ): Promise<void> {
-    await this.withRetry(() =>
-      this.client.hSet(this.prHashKey(userName), key, JSON.stringify(record))
-    );
+    const hashKey = this.prHashKey(userName);
+    const payload = JSON.stringify(record);
+    try {
+      await this.withRetry(() => this.client.hSet(hashKey, key, payload));
+    } catch (err: any) {
+      if (String(err?.message || '').includes('WRONGTYPE')) {
+        await this.withRetry(() => this.client.del(hashKey));
+        await this.withRetry(() => this.client.hSet(hashKey, key, payload));
+        return;
+      }
+      throw err;
+    }
   }
 
   async getAllPlayRecords(
     userName: string
   ): Promise<Record<string, PlayRecord>> {
-    const all = await this.withRetry(() =>
-      this.client.hGetAll(this.prHashKey(userName))
-    );
-    const result: Record<string, PlayRecord> = {};
-    for (const [field, raw] of Object.entries(all)) {
-      if (raw) {
-        result[field] = JSON.parse(raw) as PlayRecord;
+    try {
+      const all = await this.withRetry(() =>
+        this.client.hGetAll(this.prHashKey(userName))
+      );
+      const result: Record<string, PlayRecord> = {};
+      for (const [field, raw] of Object.entries(all)) {
+        if (raw) {
+          result[field] = JSON.parse(raw) as PlayRecord;
+        }
       }
+      return result;
+    } catch (err: any) {
+      if (String(err?.message || '').includes('WRONGTYPE')) {
+        return {};
+      }
+      throw err;
     }
-    return result;
   }
 
   async deletePlayRecord(userName: string, key: string): Promise<void> {

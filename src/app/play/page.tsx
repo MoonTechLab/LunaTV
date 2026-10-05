@@ -1082,8 +1082,7 @@ function PlayPageClient() {
       !artPlayerRef.current ||
       !currentSourceRef.current ||
       !currentIdRef.current ||
-      !videoTitleRef.current ||
-      !detailRef.current?.source_name
+      !videoTitleRef.current
     ) {
       return;
     }
@@ -1100,11 +1099,12 @@ function PlayPageClient() {
     try {
       await savePlayRecord(currentSourceRef.current, currentIdRef.current, {
         title: videoTitleRef.current,
-        source_name: detailRef.current?.source_name || '',
-        year: detailRef.current?.year,
+        source_name:
+          detailRef.current?.source_name || currentSourceRef.current || '',
+        year: String(detailRef.current?.year || ''),
         cover: detailRef.current?.poster || '',
-        index: currentEpisodeIndexRef.current + 1, // 转换为1基索引
-        total_episodes: detailRef.current?.episodes.length || 1,
+        index: Math.max(1, (currentEpisodeIndexRef.current || 0) + 1),
+        total_episodes: Math.max(1, detailRef.current?.episodes?.length || 1),
         play_time: Math.floor(currentTime),
         total_time: Math.floor(duration),
         save_time: Date.now(),

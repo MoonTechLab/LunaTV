@@ -186,7 +186,9 @@ export async function getDetailFromApi(
   }
 
   const videoDetail = data.list[0];
-  let { episodes, titles } = extractPlaylists(videoDetail.vod_play_url);
+  const playlists = extractPlaylists(videoDetail.vod_play_url);
+  const titles = playlists.titles;
+  let episodes = playlists.episodes;
 
   // 如果播放源为空，则尝试从内容中解析 m3u8
   if (episodes.length === 0 && videoDetail.vod_content) {

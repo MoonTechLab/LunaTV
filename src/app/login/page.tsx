@@ -100,7 +100,7 @@ function LoginPageClient() {
     fetch('/api/register')
       .then((r) => r.json())
       .then((d) => setRegisterOpen(!!d.open))
-      .catch(() => {});
+      .catch(() => undefined);
   }, []);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {

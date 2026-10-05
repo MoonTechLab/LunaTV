@@ -1,22 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
+import { extractPlaylists, parseCmsResponse } from '@/lib/cms';
 import { API_CONFIG, ApiSite, getConfig } from '@/lib/config';
 import { getCachedSearchPage, setCachedSearchPage } from '@/lib/search-cache';
 import { SearchResult } from '@/lib/types';
 import { cleanHtmlTags } from '@/lib/utils';
-
-interface ApiSearchItem {
-  vod_id: string;
-  vod_name: string;
-  vod_pic: string;
-  vod_remarks?: string;
-  vod_play_url?: string;
-  vod_class?: string;
-  vod_year?: string;
-  vod_content?: string;
-  vod_douban_id?: number;
-  type_name?: string;
-}
 
 /**
  * 通用的带缓存搜索函数
@@ -57,51 +45,19 @@ async function searchWithCache(
       return { results: [] };
     }
 
-    const data = await response.json();
-    if (
-      !data ||
-      !data.list ||
-      !Array.isArray(data.list) ||
-      data.list.length === 0
-    ) {
+    const data = parseCmsResponse(await response.text());
+    if (!data.list.length) {
       // 空结果不做负缓存要求，这里不写入缓存
       return { results: [] };
     }
 
     // 处理结果数据
-    const allResults = data.list.map((item: ApiSearchItem) => {
-      let episodes: string[] = [];
-      let titles: string[] = [];
-
-      // 使用正则表达式从 vod_play_url 提取 m3u8 链接
-      if (item.vod_play_url) {
-        // 先用 $$$ 分割
-        const vod_play_url_array = item.vod_play_url.split('$$$');
-        // 分集之间#分割，标题和播放链接 $ 分割
-        vod_play_url_array.forEach((url: string) => {
-          const matchEpisodes: string[] = [];
-          const matchTitles: string[] = [];
-          const title_url_array = url.split('#');
-          title_url_array.forEach((title_url: string) => {
-            const episode_title_url = title_url.split('$');
-            if (
-              episode_title_url.length === 2 &&
-              episode_title_url[1].endsWith('.m3u8')
-            ) {
-              matchTitles.push(episode_title_url[0]);
-              matchEpisodes.push(episode_title_url[1]);
-            }
-          });
-          if (matchEpisodes.length > episodes.length) {
-            episodes = matchEpisodes;
-            titles = matchTitles;
-          }
-        });
-      }
+    const allResults = data.list.map((item) => {
+      const { episodes, titles } = extractPlaylists(item.vod_play_url);
 
       return {
         id: item.vod_id.toString(),
-        title: item.vod_name.trim().replace(/\s+/g, ' '),
+        title: (item.vod_name || '').trim().replace(/\s+/g, ' '),
         poster: item.vod_pic,
         episodes,
         episodes_titles: titles,
@@ -117,8 +73,10 @@ async function searchWithCache(
       };
     });
 
-    // 过滤掉集数为 0 的结果
-    const results = allResults.filter((result: SearchResult) => result.episodes.length > 0);
+    // 搜索列表未必带播放地址，无分集的结果仍展示，详情页再补全
+    const results = allResults.filter(
+      (result: SearchResult) => Boolean(result.id && result.title)
+    );
 
     const pageCount = page === 1 ? data.pagecount || 1 : undefined;
     // 写入缓存（成功）
@@ -221,46 +179,14 @@ export async function getDetailFromApi(
     throw new Error(`详情请求失败: ${response.status}`);
   }
 
-  const data = await response.json();
+  const data = parseCmsResponse(await response.text());
 
-  if (
-    !data ||
-    !data.list ||
-    !Array.isArray(data.list) ||
-    data.list.length === 0
-  ) {
+  if (!data.list.length) {
     throw new Error('获取到的详情内容无效');
   }
 
   const videoDetail = data.list[0];
-  let episodes: string[] = [];
-  let titles: string[] = [];
-
-  // 处理播放源拆分
-  if (videoDetail.vod_play_url) {
-    // 先用 $$$ 分割
-    const vod_play_url_array = videoDetail.vod_play_url.split('$$$');
-    // 分集之间#分割，标题和播放链接 $ 分割
-    vod_play_url_array.forEach((url: string) => {
-      const matchEpisodes: string[] = [];
-      const matchTitles: string[] = [];
-      const title_url_array = url.split('#');
-      title_url_array.forEach((title_url: string) => {
-        const episode_title_url = title_url.split('$');
-        if (
-          episode_title_url.length === 2 &&
-          episode_title_url[1].endsWith('.m3u8')
-        ) {
-          matchTitles.push(episode_title_url[0]);
-          matchEpisodes.push(episode_title_url[1]);
-        }
-      });
-      if (matchEpisodes.length > episodes.length) {
-        episodes = matchEpisodes;
-        titles = matchTitles;
-      }
-    });
-  }
+  let { episodes, titles } = extractPlaylists(videoDetail.vod_play_url);
 
   // 如果播放源为空，则尝试从内容中解析 m3u8
   if (episodes.length === 0 && videoDetail.vod_content) {
@@ -280,7 +206,7 @@ export async function getDetailFromApi(
     year: videoDetail.vod_year
       ? videoDetail.vod_year.match(/\d{4}/)?.[0] || ''
       : 'unknown',
-    desc: cleanHtmlTags(videoDetail.vod_content),
+    desc: cleanHtmlTags(videoDetail.vod_content || ''),
     type_name: videoDetail.type_name,
     douban_id: videoDetail.vod_douban_id,
   };

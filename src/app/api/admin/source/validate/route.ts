@@ -3,8 +3,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getAuthInfoFromCookie } from '@/lib/auth';
-import { getConfig } from '@/lib/config';
-import { API_CONFIG } from '@/lib/config';
+import { parseCmsResponse } from '@/lib/cms';
+import { API_CONFIG, getConfig } from '@/lib/config';
 
 export const runtime = 'nodejs';
 
@@ -90,18 +90,13 @@ export async function GET(request: NextRequest) {
               throw new Error(`HTTP ${response.status}`);
             }
 
-            const data = await response.json() as any;
+            const data = parseCmsResponse(await response.text());
 
             // 检查结果是否有效
             let status: 'valid' | 'no_results' | 'invalid';
-            if (
-              data &&
-              data.list &&
-              Array.isArray(data.list) &&
-              data.list.length > 0
-            ) {
+            if (data.list.length > 0) {
               // 检查是否有标题包含搜索词的结果
-              const validResults = data.list.filter((item: any) => {
+              const validResults = data.list.filter((item) => {
                 const title = item.vod_name || '';
                 return title.toLowerCase().includes(searchKeyword.toLowerCase());
               });

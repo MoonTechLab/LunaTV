@@ -3,13 +3,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getAuthInfoFromCookie } from '@/lib/auth';
-import { getConfig } from '@/lib/config';
+import { getConfig, setCachedConfig } from '@/lib/config';
 import { db } from '@/lib/db';
 
 export const runtime = 'nodejs';
 
 // 支持的操作类型
-type Action = 'add' | 'disable' | 'enable' | 'delete' | 'sort' | 'batch_disable' | 'batch_enable' | 'batch_delete';
+type Action = 'add' | 'disable' | 'enable' | 'delete' | 'sort' | 'batch_add' | 'batch_disable' | 'batch_enable' | 'batch_delete';
 
 interface BaseBody {
   action?: Action;
@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
     const username = authInfo.username;
 
     // 基础校验
-    const ACTIONS: Action[] = ['add', 'disable', 'enable', 'delete', 'sort', 'batch_disable', 'batch_enable', 'batch_delete'];
+    const ACTIONS: Action[] = ['add', 'disable', 'enable', 'delete', 'sort', 'batch_add', 'batch_disable', 'batch_enable', 'batch_delete'];
     if (!username || !action || !ACTIONS.includes(action)) {
       return NextResponse.json({ error: '参数格式错误' }, { status: 400 });
     }
@@ -78,6 +78,53 @@ export async function POST(request: NextRequest) {
           disabled: false,
         });
         break;
+      }
+      case 'batch_add': {
+        const { sources } = body as {
+          sources?: {
+            key?: string;
+            name?: string;
+            api?: string;
+            detail?: string;
+          }[];
+        };
+        if (!Array.isArray(sources) || sources.length === 0) {
+          return NextResponse.json(
+            { error: '缺少 sources 参数或为空' },
+            { status: 400 }
+          );
+        }
+
+        const existing = new Set(adminConfig.SourceConfig.map((s) => s.key));
+        let added = 0;
+        let skipped = 0;
+
+        sources.forEach((item) => {
+          const key = item.key?.trim();
+          const name = item.name?.trim();
+          const api = item.api?.trim();
+          if (!key || !name || !api || existing.has(key)) {
+            skipped += 1;
+            return;
+          }
+          existing.add(key);
+          adminConfig.SourceConfig.push({
+            key,
+            name,
+            api,
+            detail: item.detail?.trim() || undefined,
+            from: 'custom',
+            disabled: false,
+          });
+          added += 1;
+        });
+
+        await db.saveAdminConfig(adminConfig);
+        await setCachedConfig(adminConfig);
+        return NextResponse.json(
+          { ok: true, added, skipped },
+          { headers: { 'Cache-Control': 'no-store' } }
+        );
       }
       case 'disable': {
         const { key } = body as { key?: string };
@@ -225,6 +272,7 @@ export async function POST(request: NextRequest) {
 
     // 持久化到存储
     await db.saveAdminConfig(adminConfig);
+    await setCachedConfig(adminConfig);
 
     return NextResponse.json(
       { ok: true },

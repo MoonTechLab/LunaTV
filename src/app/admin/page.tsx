@@ -2032,6 +2032,8 @@ const VideoSourceConfig = ({
   const { isLoading, withLoading } = useLoadingState();
   const [sources, setSources] = useState<DataSource[]>([]);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [showBatchForm, setShowBatchForm] = useState(false);
+  const [batchText, setBatchText] = useState('');
   const [orderChanged, setOrderChanged] = useState(false);
   const [newSource, setNewSource] = useState<DataSource>({
     name: '',
@@ -2161,6 +2163,67 @@ const VideoSourceConfig = ({
       setShowAddForm(false);
     }).catch(() => {
       console.error('操作失败', 'add', newSource);
+    });
+  };
+
+  const handleBatchImport = () => {
+    if (!batchText.trim()) return;
+    withLoading('batchAddSources', async () => {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(batchText);
+      } catch {
+        throw new Error('JSON 格式不正确');
+      }
+
+      let sources: { key: string; name: string; api: string; detail?: string }[] = [];
+      if (Array.isArray(parsed)) {
+        sources = parsed as { key: string; name: string; api: string; detail?: string }[];
+      } else if (parsed && typeof parsed === 'object') {
+        const map =
+          'api_site' in parsed &&
+          parsed.api_site &&
+          typeof parsed.api_site === 'object'
+            ? (parsed as { api_site: Record<string, { name?: string; api?: string; detail?: string }> }).api_site
+            : (parsed as Record<string, { name?: string; api?: string; detail?: string }>);
+        sources = Object.entries(map).map(([key, site]) => {
+          const item =
+            site && typeof site === 'object'
+              ? site
+              : { name: key, api: '' };
+          return {
+            key,
+            name: item.name || key,
+            api: item.api || '',
+            detail: item.detail,
+          };
+        });
+      }
+
+      const resp = await fetch('/api/admin/source', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'batch_add', sources }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        throw new Error(data.error || `导入失败: ${resp.status}`);
+      }
+      await refreshConfig();
+      setBatchText('');
+      setShowBatchForm(false);
+      showAlert({
+        type: 'success',
+        title: '批量导入完成',
+        message: `新增 ${data.added || 0} 个，跳过 ${data.skipped || 0} 个`,
+        timer: 2500,
+      });
+    }).catch((err) => {
+      showAlert({
+        type: 'error',
+        title: '批量导入失败',
+        message: err instanceof Error ? err.message : '导入失败',
+      });
     });
   };
 
@@ -2561,7 +2624,19 @@ const VideoSourceConfig = ({
               )}
             </button>
             <button
-              onClick={() => setShowAddForm(!showAddForm)}
+              onClick={() => {
+                setShowBatchForm(!showBatchForm);
+                if (!showBatchForm) setShowAddForm(false);
+              }}
+              className={showBatchForm ? buttonStyles.secondary : buttonStyles.primary}
+            >
+              {showBatchForm ? '取消' : '批量导入'}
+            </button>
+            <button
+              onClick={() => {
+                setShowAddForm(!showAddForm);
+                if (!showAddForm) setShowBatchForm(false);
+              }}
               className={showAddForm ? buttonStyles.secondary : buttonStyles.success}
             >
               {showAddForm ? '取消' : '添加视频源'}
@@ -2622,7 +2697,35 @@ const VideoSourceConfig = ({
         </div>
       )}
 
-
+      {showBatchForm && (
+        <div className='p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 space-y-4'>
+          <p className='text-sm text-gray-600 dark:text-gray-400'>
+            粘贴你自己的源列表。支持数组、配置文件里的 api_site 对象，或 key-对象 映射。
+          </p>
+          <textarea
+            value={batchText}
+            onChange={(e) => setBatchText(e.target.value)}
+            rows={10}
+            placeholder={`{
+  "mysource": {
+    "name": "自有源",
+    "api": "https://your-source.example.com/api.php/provide/vod",
+    "detail": ""
+  }
+}`}
+            className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-mono text-sm'
+          />
+          <div className='flex justify-end'>
+            <button
+              onClick={handleBatchImport}
+              disabled={!batchText.trim() || isLoading('batchAddSources')}
+              className={`w-full sm:w-auto px-4 py-2 ${!batchText.trim() || isLoading('batchAddSources') ? buttonStyles.disabled : buttonStyles.success}`}
+            >
+              {isLoading('batchAddSources') ? '导入中...' : '导入'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 视频源表格 */}
       <div className='border border-gray-200 dark:border-gray-700 rounded-lg max-h-[28rem] overflow-y-auto overflow-x-auto relative' data-table="source-list">

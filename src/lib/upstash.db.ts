@@ -81,9 +81,20 @@ export class UpstashRedisStorage implements IStorage {
     key: string,
     record: PlayRecord
   ): Promise<void> {
-    await withRetry(() =>
-      this.client.hset(this.prHashKey(userName), { [key]: record })
-    );
+    try {
+      await withRetry(() =>
+        this.client.hset(this.prHashKey(userName), { [key]: record })
+      );
+    } catch (err: any) {
+      if (String(err?.message || '').includes('WRONGTYPE')) {
+        await withRetry(() => this.client.del(this.prHashKey(userName)));
+        await withRetry(() =>
+          this.client.hset(this.prHashKey(userName), { [key]: record })
+        );
+        return;
+      }
+      throw err;
+    }
   }
 
   async getAllPlayRecords(

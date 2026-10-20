@@ -210,6 +210,65 @@ function PlayPageClient() {
   // 工具函数（Utils）
   // -----------------------------------------------------------------------------
 
+  const isWebPagePlayer = (url: string): boolean => {
+    if (!url) return false;
+    const u = url.toLowerCase().trim();
+
+    try {
+      const parsed = new URL(url);
+      const searchTarget =
+        parsed.searchParams.get('url') || parsed.searchParams.get('v');
+      // 1. 无解析目标参数，纯媒体路径走流播放器
+      if (!searchTarget) {
+        if (
+          parsed.pathname.endsWith('.m3u8') ||
+          parsed.pathname.endsWith('.mp4') ||
+          parsed.pathname.endsWith('.flv')
+        ) {
+          return false;
+        }
+      } else {
+        // 2. 含有 ?url= 参数
+        // 若不是 live.m3u8 代理流，且域名或路径是典型的 Web 网页解析器，则走 iframe
+        if (
+          !parsed.pathname.includes('live.m3u8') &&
+          !parsed.pathname.endsWith('.m3u8') &&
+          (parsed.hostname.includes('1ljx.com') ||
+            parsed.hostname.includes('xmflv.com') ||
+            parsed.hostname.includes('playerjy.com') ||
+            parsed.hostname.includes('jsonplayer.com') ||
+            parsed.hostname.startsWith('jx.') ||
+            parsed.pathname.includes('/player/') ||
+            parsed.pathname.includes('/api.php'))
+        ) {
+          return true;
+        }
+      }
+    } catch (_) {}
+
+    // 兜底判定
+    if (u.endsWith('.m3u8') || u.endsWith('.mp4')) {
+      return false;
+    }
+    if (u.includes('?url=http') && !u.includes('live.m3u8')) {
+      return true;
+    }
+    return false;
+  };
+
+  // 在 HTTPS 环境下将 HTTP 视频流安全转接至本地 M3U8 代理，杜绝 Mixed Content 浏览器阻断
+  const getSafePlayUrl = (rawUrl: string): string => {
+    if (!rawUrl) return '';
+    if (
+      typeof window !== 'undefined' &&
+      window.location.protocol === 'https:' &&
+      rawUrl.toLowerCase().startsWith('http://')
+    ) {
+      return `/api/proxy/m3u8?url=${encodeURIComponent(rawUrl)}`;
+    }
+    return rawUrl;
+  };
+
   // 播放源优选函数
   const preferBestSource = async (
     sources: SearchResult[]
@@ -1256,23 +1315,33 @@ function PlayPageClient() {
       setError('视频地址无效');
       return;
     }
-    console.log(videoUrl);
+
+    // 网页解析播放器模式 (iframe)
+    if (isWebPagePlayer(videoUrl)) {
+      if (artPlayerRef.current) {
+        cleanupPlayer();
+      }
+      setIsVideoLoading(false);
+      return;
+    }
 
     // 检测是否为WebKit浏览器
     const isWebkit =
       typeof window !== 'undefined' &&
       typeof (window as any).webkitConvertPointFromNodeToPage === 'function';
 
+    const safeUrl = getSafePlayUrl(videoUrl);
+
     // 非WebKit浏览器且播放器已存在，使用switch方法切换
     if (!isWebkit && artPlayerRef.current) {
-      artPlayerRef.current.switch = videoUrl;
+      artPlayerRef.current.switch = safeUrl;
       artPlayerRef.current.title = `${videoTitle} - 第${currentEpisodeIndex + 1
         }集`;
       artPlayerRef.current.poster = videoCover;
       if (artPlayerRef.current?.video) {
         ensureVideoSource(
           artPlayerRef.current.video as HTMLVideoElement,
-          videoUrl
+          safeUrl
         );
       }
       return;
@@ -1291,7 +1360,7 @@ function PlayPageClient() {
 
       artPlayerRef.current = new Artplayer({
         container: artRef.current,
-        url: videoUrl,
+        url: safeUrl,
         poster: videoCover,
         volume: 0.7,
         isLive: false,
@@ -1335,15 +1404,25 @@ function PlayPageClient() {
               video.hls.destroy();
             }
             const hls = new Hls({
-              debug: false, // 关闭日志
-              enableWorker: true, // WebWorker 解码，降低主线程压力
-              lowLatencyMode: false, // 点播无需低延迟，关闭后缓冲更充足，弱网下不易卡顿
+              debug: false,
+              enableWorker: true, // WebWorker 解码，完全独立于 UI 线程，保障页面交互 60fps 满帧
+              lowLatencyMode: false,
+              progressive: true, // 咕噜咕噜黑科技：流式边下边推直通，首块数据即刻启动 Demux 解码
+              startFragPrefetch: true, // 咕噜咕噜黑科技：首切片极速预取秒开
+              testBandwidth: false, // 咕噜咕噜黑科技：禁用首播测速等待，直达最快起播
 
-              /* 缓冲/内存相关 */
-              maxBufferLength: 60, // 前向缓冲最大 60s，出网带宽小的源可提前缓冲，减少卡顿
-              maxMaxBufferLength: 120, // 网络较差时允许缓冲区扩大到 120s
-              backBufferLength: 30, // 仅保留 30s 已播放内容，避免内存占用
-              maxBufferSize: 100 * 1000 * 1000, // 约 100MB，超出后触发清理
+              /* 缓冲与内存管理 */
+              maxBufferLength: 60, // 前向缓冲最大 60s
+              maxMaxBufferLength: 120,
+              backBufferLength: 30, // 保留 30s 播放历史，快退 5 秒零二次缓冲
+              maxBufferSize: 120 * 1000 * 1000, // 120MB 环形内存池
+              maxBufferHole: 0.5, // 容忍 0.5s 小空洞
+              highBufferWatchdogPeriod: 2, // 缓冲看门狗监控
+              nudgeOffset: 0.1, // 微缝平滑跳跃，杜绝时间戳缝隙死循环转圈
+              nudgeMaxRetry: 5,
+              manifestLoadingTimeOut: 10000,
+              levelLoadingTimeOut: 10000,
+              fragLoadingTimeOut: 20000,
 
               /* 自定义loader */
               loader: blockAdEnabledRef.current
@@ -1891,10 +1970,21 @@ function PlayPageClient() {
                 }`}
             >
               <div className='relative w-full h-[300px] lg:h-full'>
-                <div
-                  ref={artRef}
-                  className='bg-black w-full h-full rounded-xl overflow-hidden shadow-lg'
-                ></div>
+                {isWebPagePlayer(videoUrl) ? (
+                  <iframe
+                    key={videoUrl}
+                    src={videoUrl}
+                    className='w-full h-full rounded-xl overflow-hidden shadow-lg border-0 bg-black'
+                    allow='fullscreen; autoplay; encrypted-media; picture-in-picture'
+                    allowFullScreen
+                    onLoad={() => setIsVideoLoading(false)}
+                  />
+                ) : (
+                  <div
+                    ref={artRef}
+                    className='bg-black w-full h-full rounded-xl overflow-hidden shadow-lg'
+                  ></div>
+                )}
 
                 {/* 换源加载蒙层 */}
                 {isVideoLoading && (

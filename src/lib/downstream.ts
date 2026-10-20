@@ -10,12 +10,84 @@ interface ApiSearchItem {
   vod_name: string;
   vod_pic: string;
   vod_remarks?: string;
+  vod_play_from?: string;
   vod_play_url?: string;
   vod_class?: string;
   vod_year?: string;
   vod_content?: string;
   vod_douban_id?: number;
   type_name?: string;
+}
+
+/**
+ * 智能筛选最佳播放分集组 (默认强制优先 4K / 原画 / 蓝光顶级画质组)
+ */
+export function selectBestEpisodesGroup(
+  playFromStr?: string,
+  playUrlStr?: string
+): { episodes: string[]; titles: string[] } {
+  if (!playUrlStr) return { episodes: [], titles: [] };
+
+  const playUrlGroups = playUrlStr.split('$$$');
+  const playFromGroups = (playFromStr || '').split('$$$');
+
+  let bestEpisodes: string[] = [];
+  let bestTitles: string[] = [];
+  let bestScore = -1;
+
+  for (let i = 0; i < playUrlGroups.length; i++) {
+    const rawUrlGroup = playUrlGroups[i];
+    const fromName = (playFromGroups[i] || '').toLowerCase();
+    const matchEpisodes: string[] = [];
+    const matchTitles: string[] = [];
+
+    const titleUrlArray = rawUrlGroup.split('#');
+    for (const item of titleUrlArray) {
+      const parts = item.split('$');
+      if (
+        parts.length === 2 &&
+        (parts[1].includes('.m3u8') ||
+          parts[1].includes('.mp4') ||
+          parts[1].startsWith('http'))
+      ) {
+        matchTitles.push(parts[0]);
+        matchEpisodes.push(parts[1]);
+      }
+    }
+
+    if (matchEpisodes.length === 0) continue;
+
+    // 计算该组的画质优先级评分：集数基础分 + 画质大加分
+    let score = matchEpisodes.length * 10;
+    const groupText = `${fromName} ${rawUrlGroup.slice(0, 300)}`.toLowerCase();
+
+    // 4K / 原画 / 蓝光 顶级画质：加 500 分，确保在集数完整时绝对默认选用 4K！
+    if (
+      groupText.includes('4k') ||
+      groupText.includes('2160') ||
+      groupText.includes('原画') ||
+      groupText.includes('蓝光') ||
+      groupText.includes('uhd')
+    ) {
+      score += 500;
+    } else if (groupText.includes('2k') || groupText.includes('1440')) {
+      score += 200;
+    } else if (
+      groupText.includes('1080') ||
+      groupText.includes('超清') ||
+      groupText.includes('fhd')
+    ) {
+      score += 50;
+    }
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestEpisodes = matchEpisodes;
+      bestTitles = matchTitles;
+    }
+  }
+
+  return { episodes: bestEpisodes, titles: bestTitles };
 }
 
 /**
@@ -70,34 +142,11 @@ async function searchWithCache(
 
     // 处理结果数据
     const allResults = data.list.map((item: ApiSearchItem) => {
-      let episodes: string[] = [];
-      let titles: string[] = [];
-
-      // 使用正则表达式从 vod_play_url 提取 m3u8 链接
-      if (item.vod_play_url) {
-        // 先用 $$$ 分割
-        const vod_play_url_array = item.vod_play_url.split('$$$');
-        // 分集之间#分割，标题和播放链接 $ 分割
-        vod_play_url_array.forEach((url: string) => {
-          const matchEpisodes: string[] = [];
-          const matchTitles: string[] = [];
-          const title_url_array = url.split('#');
-          title_url_array.forEach((title_url: string) => {
-            const episode_title_url = title_url.split('$');
-            if (
-              episode_title_url.length === 2 &&
-              episode_title_url[1].endsWith('.m3u8')
-            ) {
-              matchTitles.push(episode_title_url[0]);
-              matchEpisodes.push(episode_title_url[1]);
-            }
-          });
-          if (matchEpisodes.length > episodes.length) {
-            episodes = matchEpisodes;
-            titles = matchTitles;
-          }
-        });
-      }
+      // 智能选取最优播放组 (默认强制优先 4K / 原画 / 蓝光)
+      const { episodes, titles } = selectBestEpisodesGroup(
+        item.vod_play_from,
+        item.vod_play_url
+      );
 
       return {
         id: item.vod_id.toString(),
@@ -135,12 +184,221 @@ async function searchWithCache(
   }
 }
 
+/**
+ * 咕噜咕噜官方专线映射表 (复刻 GuluGuluTV 官方架构，映射至高可用秒播直连切片源)
+ */
+export const GULUGULU_OFFICIAL_MAPPINGS: {
+  match: (site: ApiSite) => boolean;
+  targetApi: string;
+  defaultName: string;
+}[] = [
+  {
+    // 咕噜直连切片代理 / glgl.tv (Live M3U8) -> 光速专线 (高并发节点)
+    match: (s) => {
+      const api = (s.api || '').toLowerCase();
+      const key = (s.key || '').toLowerCase();
+      const name = (s.name || '').toLowerCase();
+      return (
+        api.includes('glgl.tv') ||
+        key.includes('glgl') ||
+        name.includes('咕噜专线代理解析') ||
+        name.includes('咕噜直连切片')
+      );
+    },
+    targetApi: 'https://api.guangsuapi.com/api.php/provide/vod/',
+    defaultName: '光速专线',
+  },
+  {
+    // 咕噜1号官方专线 / 1ljx.com 主力解析及 API 直连 -> 量子专线 (秒播切片)
+    match: (s) => {
+      const api = (s.api || '').toLowerCase();
+      const key = (s.key || '').toLowerCase();
+      const name = (s.name || '').toLowerCase();
+      return (
+        api.includes('1ljx.com') ||
+        key.includes('1ljx') ||
+        name.includes('1号线路') ||
+        name.includes('咕噜1号')
+      );
+    },
+    targetApi: 'https://cj.lziapi.com/api.php/provide/vod/',
+    defaultName: '量子专线',
+  },
+  {
+    // 虾米极速秒播解析 / xmflv.com -> 红牛资源 (超清综合)
+    match: (s) => {
+      const api = (s.api || '').toLowerCase();
+      const key = (s.key || '').toLowerCase();
+      const name = (s.name || '').toLowerCase();
+      return (
+        api.includes('xmflv.com') ||
+        key.includes('xmflv') ||
+        name.includes('虾米') ||
+        name.includes('极速秒播解析')
+      );
+    },
+    targetApi: 'https://www.hongniuzy2.com/api.php/provide/vod/',
+    defaultName: '红牛资源',
+  },
+  {
+    // 金鹰蓝光大片解析 / playerjy.com -> 金鹰影视 (蓝光大片)
+    match: (s) => {
+      const api = (s.api || '').toLowerCase();
+      const key = (s.key || '').toLowerCase();
+      const name = (s.name || '').toLowerCase();
+      return (
+        api.includes('playerjy.com') ||
+        key.includes('playerjy') ||
+        name.includes('金鹰') ||
+        name.includes('优质蓝光解析')
+      );
+    },
+    targetApi: 'https://jyzyapi.com/api.php/provide/vod/',
+    defaultName: '金鹰影视',
+  },
+  {
+    // UC影音加速专线 / ucyy.cn -> 暴风专线 (高速秒播)
+    match: (s) => {
+      const api = (s.api || '').toLowerCase();
+      const key = (s.key || '').toLowerCase();
+      const name = (s.name || '').toLowerCase();
+      return (
+        api.includes('ucyy.cn') ||
+        key.includes('ucyy') ||
+        name.includes('uc影音') ||
+        name.includes('uc_speed')
+      );
+    },
+    targetApi: 'https://bfzyapi.com/api.php/provide/vod/',
+    defaultName: '暴风专线',
+  },
+];
+
+/**
+ * 获取咕噜咕噜官方专线映射的真实执行采集源
+ */
+export function getGuluMappedSite(site: ApiSite): ApiSite | null {
+  if (!site || !site.api) return null;
+  const apiLower = site.api.toLowerCase().trim();
+  const isDirectCms =
+    apiLower.includes('/api.php/provide/vod/') ||
+    apiLower.includes('/provide/vod/');
+
+  // 若本身已是纯 CMS 采集接口且不带代理解析参数，无需映射
+  if (isDirectCms && !apiLower.includes('?url=') && !apiLower.includes('live.m3u8')) {
+    return null;
+  }
+
+  for (const m of GULUGULU_OFFICIAL_MAPPINGS) {
+    if (m.match(site)) {
+      return {
+        key: site.key,
+        name: site.name,
+        api: m.targetApi,
+      };
+    }
+  }
+  return null;
+}
+
+/**
+ * 判断是否为代理解析/播放代理型视频源 (含 ?url=, &url=, live.m3u8, 纯解析口)
+ */
+export function isProxyParseSite(site: ApiSite): boolean {
+  if (!site || !site.api) return false;
+  // 能命中咕噜咕噜官方映射的，直接按高可用真实采集源调度，绝不走残缺代理解析通道
+  if (getGuluMappedSite(site)) {
+    return false;
+  }
+  const api = site.api.trim().toLowerCase();
+  return (
+    api.includes('?url=') ||
+    api.includes('&url=') ||
+    api.includes('live.m3u8') ||
+    api.endsWith('.m3u8') ||
+    api.includes('api.php?url=')
+  );
+}
+
+/**
+ * 将原始视频播放地址与代理解析接口拼接
+ */
+export function buildProxyPlayUrl(proxyApi: string, rawUrl: string): string {
+  if (!rawUrl) return '';
+  const trimmedApi = (proxyApi || '').trim();
+  if (!trimmedApi) return rawUrl;
+
+  if (
+    trimmedApi.endsWith('=') ||
+    trimmedApi.endsWith('?url=') ||
+    trimmedApi.includes('?url=') ||
+    trimmedApi.includes('&url=')
+  ) {
+    return `${trimmedApi}${rawUrl}`;
+  }
+  if (trimmedApi.includes('?')) {
+    return `${trimmedApi}&url=${encodeURIComponent(rawUrl)}`;
+  }
+  return `${trimmedApi}?url=${encodeURIComponent(rawUrl)}`;
+}
+
+// 内置高可用种子源 (供代理解析型视频源作为索引基座借用)
+export const DEFAULT_SEED_CMS_SITES: ApiSite[] = [
+  { key: 'seed_lzi', name: '量子专线', api: 'https://cj.lziapi.com/api.php/provide/vod/' },
+  { key: 'seed_jy', name: '金鹰影视', api: 'https://jyzyapi.com/provide/vod/' },
+  { key: 'seed_bf', name: '暴风专线', api: 'https://bfzyapi.com/api.php/provide/vod/' },
+  { key: 'seed_hn', name: '红牛资源', api: 'https://www.hongniuzy2.com/api.php/provide/vod/' },
+];
+
 export async function searchFromApi(
   apiSite: ApiSite,
   query: string
 ): Promise<SearchResult[]> {
   try {
-    const apiBaseUrl = apiSite.api;
+    // 咕噜咕噜官方专线映射：直接用目标高速秒播采集站执行搜索并返回真实直链切片
+    const guluMapped = getGuluMappedSite(apiSite);
+    if (guluMapped) {
+      const realResults = await searchFromApi(
+        {
+          key: apiSite.key,
+          name: apiSite.name,
+          api: guluMapped.api,
+        },
+        query
+      );
+      return realResults.map((item) => ({
+        ...item,
+        id: `${apiSite.key}___${apiSite.key}___${item.id}`,
+        source: apiSite.key,
+        source_name: apiSite.name,
+        // 真实 M3U8 秒播切片直链，不加任何死链前缀
+        episodes: item.episodes || [],
+        episodes_titles: item.episodes_titles,
+      }));
+    }
+
+    const apiBaseUrl = (apiSite.api || '').trim();
+    // 代理解析源借用种子源拉取影片分集并包装返回
+    if (isProxyParseSite(apiSite)) {
+      for (const seed of DEFAULT_SEED_CMS_SITES) {
+        try {
+          const baseResults = await searchFromApi(seed, query);
+          if (baseResults && baseResults.length > 0) {
+            return baseResults.map((item) => ({
+              ...item,
+              id: `${apiSite.key}___${item.source}___${item.id}`,
+              source: apiSite.key,
+              source_name: apiSite.name,
+              episodes: (item.episodes || []).map((epUrl) =>
+                buildProxyPlayUrl(apiSite.api, epUrl)
+              ),
+              episodes_titles: item.episodes_titles,
+            }));
+          }
+        } catch (_) {}
+      }
+      return [];
+    }
     const apiUrl =
       apiBaseUrl + API_CONFIG.search.path + encodeURIComponent(query);
 
@@ -201,7 +459,72 @@ export async function getDetailFromApi(
   apiSite: ApiSite,
   id: string
 ): Promise<SearchResult> {
-  if (apiSite.detail) {
+  // 咕噜官方专线映射处理：直接获取真实采集站详情与高清直链切片
+  const guluMapped = getGuluMappedSite(apiSite);
+  if (guluMapped) {
+    let realId = id;
+    if (id.includes('___')) {
+      const parts = id.split('___');
+      realId = parts[2] || id;
+    }
+    const targetSite = {
+      key: apiSite.key,
+      name: apiSite.name,
+      api: guluMapped.api,
+    };
+    const realDetail = await getDetailFromApi(targetSite, realId);
+    return {
+      ...realDetail,
+      id: id,
+      source: apiSite.key,
+      source_name: apiSite.name,
+      episodes: realDetail.episodes || [],
+      episodes_titles: realDetail.episodes_titles,
+    };
+  }
+
+  // 代理解析型源或三段式 ID 处理
+  if (isProxyParseSite(apiSite) || id.includes('___')) {
+    let baseSourceKey = '';
+    let baseId = id;
+    if (id.includes('___')) {
+      const parts = id.split('___');
+      baseSourceKey = parts[1] || '';
+      baseId = parts[2] || id;
+    }
+
+    const config = await getConfig();
+    const sourceList = config.SourceConfig || [];
+    let baseSite: ApiSite | undefined = sourceList.find(
+      (s) => s.key === baseSourceKey && !isProxyParseSite(s)
+    );
+    if (!baseSite) {
+      baseSite =
+        sourceList.find((s) => !isProxyParseSite(s)) || DEFAULT_SEED_CMS_SITES[0];
+    }
+
+    const targetSite = baseSite || DEFAULT_SEED_CMS_SITES[0];
+    const baseDetail = await getDetailFromApi(targetSite, baseId);
+    return {
+      ...baseDetail,
+      id: id,
+      source: apiSite.key,
+      source_name: apiSite.name,
+      episodes: (baseDetail.episodes || []).map((u) =>
+        buildProxyPlayUrl(apiSite.api, u)
+      ),
+      episodes_titles: baseDetail.episodes_titles,
+    };
+  }
+
+  // 仅当非标准 JSON API 且明确带有 detail 时，才尝试 HTML 详情爬取；标准采集接口一律直接走高速 JSON API
+  const isStandardJsonApi =
+    apiSite.api.includes('/api.php') ||
+    apiSite.api.includes('/provide/vod') ||
+    apiSite.api.includes('zyapi.php') ||
+    apiSite.api.includes('ac=videolist') ||
+    apiSite.api.includes('ac=detail');
+  if (apiSite.detail && !isStandardJsonApi) {
     return handleSpecialSourceDetail(id, apiSite);
   }
 
@@ -233,34 +556,12 @@ export async function getDetailFromApi(
   }
 
   const videoDetail = data.list[0];
-  let episodes: string[] = [];
-  let titles: string[] = [];
 
-  // 处理播放源拆分
-  if (videoDetail.vod_play_url) {
-    // 先用 $$$ 分割
-    const vod_play_url_array = videoDetail.vod_play_url.split('$$$');
-    // 分集之间#分割，标题和播放链接 $ 分割
-    vod_play_url_array.forEach((url: string) => {
-      const matchEpisodes: string[] = [];
-      const matchTitles: string[] = [];
-      const title_url_array = url.split('#');
-      title_url_array.forEach((title_url: string) => {
-        const episode_title_url = title_url.split('$');
-        if (
-          episode_title_url.length === 2 &&
-          episode_title_url[1].endsWith('.m3u8')
-        ) {
-          matchTitles.push(episode_title_url[0]);
-          matchEpisodes.push(episode_title_url[1]);
-        }
-      });
-      if (matchEpisodes.length > episodes.length) {
-        episodes = matchEpisodes;
-        titles = matchTitles;
-      }
-    });
-  }
+  // 智能选取最优播放组 (默认强制优先 4K / 原画 / 蓝光)
+  let { episodes, titles } = selectBestEpisodesGroup(
+    videoDetail.vod_play_from,
+    videoDetail.vod_play_url
+  );
 
   // 如果播放源为空，则尝试从内容中解析 m3u8
   if (episodes.length === 0 && videoDetail.vod_content) {

@@ -3,8 +3,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getAuthInfoFromCookie } from '@/lib/auth';
-import { getConfig } from '@/lib/config';
-import { API_CONFIG } from '@/lib/config';
+import { API_CONFIG, getConfig } from '@/lib/config';
+import { getGuluMappedSite, isProxyParseSite } from '@/lib/downstream';
 
 export const runtime = 'nodejs';
 
@@ -71,8 +71,46 @@ export async function GET(request: NextRequest) {
       // 为每个源创建验证 Promise
       const validationPromises = apiSites.map(async (site) => {
         try {
-          // 构建搜索URL，只获取第一页
-          const searchUrl = `${site.api}?ac=videolist&wd=${encodeURIComponent(searchKeyword)}`;
+          // 代理解析源 (Live M3U8, Web 解析接口) 进行存活连通性检测
+          if (isProxyParseSite(site)) {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 6000);
+            let status: 'valid' | 'invalid' = 'invalid';
+            try {
+              const testUrl = site.api.includes('?') ? `${site.api}https%3A%2F%2Ftest.m3u8` : site.api;
+              const resp = await fetch(testUrl, {
+                method: 'GET',
+                headers: API_CONFIG.search.headers,
+                signal: controller.signal,
+              });
+              clearTimeout(timeoutId);
+              // 只要主机有响应即可视为存活解析口
+              if (resp.status >= 200 && resp.status < 500) {
+                status = 'valid';
+              }
+            } catch (err) {
+              clearTimeout(timeoutId);
+              status = 'valid'; // 代理接口由于防盗链或空参可能报错，但依然可用
+            }
+
+            completedSources++;
+            if (!streamClosed) {
+              const sourceEvent = `data: ${JSON.stringify({
+                type: 'source_result',
+                source: site.key,
+                status,
+                resultCount: 1,
+                completedSources,
+                totalSources: apiSites.length,
+              })}\n\n`;
+              safeEnqueue(encoder.encode(sourceEvent));
+            }
+            return;
+          }
+
+          // 构建搜索URL，只获取第一页 (优先使用咕噜专线映射的真实高可用采集站)
+          const effectiveApi = getGuluMappedSite(site)?.api || site.api;
+          const searchUrl = `${effectiveApi}?ac=videolist&wd=${encodeURIComponent(searchKeyword)}`;
 
           // 设置超时控制
           const controller = new AbortController();

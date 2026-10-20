@@ -50,7 +50,16 @@ export async function GET(request: NextRequest) {
     }
 
     const results = await searchFromApi(targetSite, query);
-    let result = results.filter((r) => r.title === query);
+    const cleanQuery = query.replaceAll(' ', '').toLowerCase();
+    let result = results.filter(
+      (r) =>
+        r.title.replaceAll(' ', '').toLowerCase() === cleanQuery ||
+        r.title.replaceAll(' ', '').toLowerCase().includes(cleanQuery) ||
+        cleanQuery.includes(r.title.replaceAll(' ', '').toLowerCase())
+    );
+    if (result.length === 0 && results.length > 0) {
+      result = results;
+    }
     if (!config.SiteConfig.DisableYellowFilter) {
       result = result.filter((result) => {
         const typeName = result.type_name || '';

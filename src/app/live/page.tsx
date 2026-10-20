@@ -815,11 +815,22 @@ function LivePageClient() {
 
     const hls = new Hls({
       debug: false,
-      enableWorker: true,
+      enableWorker: true, // WebWorker 解码，保障 60fps 满帧 UI
       lowLatencyMode: true,
+      progressive: true, // 咕噜咕噜黑科技：流式边下边推直通
+      startFragPrefetch: true, // 咕噜咕噜黑科技：首切片极速预取
+      testBandwidth: false, // 禁用首播测速等待
+      initialLiveManifestSize: 1, // 直播极速起播，首列表就绪即播
       maxBufferLength: 30,
-      backBufferLength: 30,
-      maxBufferSize: 60 * 1000 * 1000,
+      backBufferLength: 15,
+      maxBufferSize: 80 * 1000 * 1000,
+      maxBufferHole: 0.5,
+      highBufferWatchdogPeriod: 2,
+      nudgeOffset: 0.1,
+      nudgeMaxRetry: 5,
+      manifestLoadingTimeOut: 10000,
+      levelLoadingTimeOut: 10000,
+      fragLoadingTimeOut: 15000,
       loader: CustomHlsJsLoader,
     });
 

@@ -73,6 +73,19 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
     new Set()
   );
 
+  // 复制播放地址提示状态
+  const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
+  const handleCopyUrl = useCallback((url: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (!url) return;
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(url).then(() => {
+        setCopiedUrl(url);
+        setTimeout(() => setCopiedUrl(null), 2000);
+      }).catch(() => {});
+    }
+  }, []);
+
   // 使用 ref 来避免闭包问题
   const attemptedSourcesRef = useRef<Set<string>>(new Set());
   const videoInfoMapRef = useRef<Map<string, VideoInfo>>(new Map());
@@ -381,6 +394,42 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
       {/* 选集 Tab 内容 */}
       {activeTab === 'episodes' && (
         <>
+          {/* 当前源与播放地址状态条 */}
+          {(() => {
+            const activeSourceObj = availableSources.find(
+              (s) => s.source?.toString() === currentSource?.toString()
+            );
+            const activeSourceName = activeSourceObj?.source_name || currentSource || '当前线路';
+            const activeEpUrl = activeSourceObj?.episodes?.[value - 1] || activeSourceObj?.episodes?.[0] || '';
+            const isCopied = copiedUrl === activeEpUrl && !!activeEpUrl;
+
+            return (
+              <div className='mb-2.5 px-3 py-1.5 rounded-lg bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 flex items-center justify-between gap-2 text-xs flex-shrink-0'>
+                <div className='flex items-center gap-1.5 min-w-0 flex-1 overflow-hidden'>
+                  <span className='font-medium text-green-600 dark:text-green-400 whitespace-nowrap text-xs flex-shrink-0'>
+                    {activeSourceName}
+                  </span>
+                  <span className='text-gray-300 dark:text-gray-600 flex-shrink-0'>|</span>
+                  <span
+                    className='text-[11px] text-gray-500 dark:text-gray-300 font-mono truncate select-all cursor-text'
+                    title={activeEpUrl || '无可用地址'}
+                  >
+                    {activeEpUrl || '正在连接播放地址...'}
+                  </span>
+                </div>
+                {activeEpUrl && (
+                  <button
+                    onClick={(e) => handleCopyUrl(activeEpUrl, e)}
+                    className='px-1.5 py-0.5 text-[10px] rounded bg-green-500/10 hover:bg-green-500/20 text-green-600 dark:text-green-400 transition-colors whitespace-nowrap flex-shrink-0'
+                    title='复制当前集播放地址'
+                  >
+                    {isCopied ? '已复制' : '复制地址'}
+                  </button>
+                )}
+              </div>
+            );
+          })()}
+
           {/* 分类标签 */}
           <div className='flex items-center gap-4 mb-4 border-b border-gray-300 dark:border-gray-700 -mx-6 px-6 flex-shrink-0'>
             <div
@@ -562,7 +611,7 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
                         </div>
 
                         {/* 信息区域 */}
-                        <div className='flex-1 min-w-0 flex flex-col justify-between h-20'>
+                        <div className='flex-1 min-w-0 flex flex-col justify-between min-h-[5rem] gap-1'>
                           {/* 标题和分辨率 - 顶部 */}
                           <div className='flex items-start justify-between gap-3 h-6'>
                             <div className='flex-1 min-w-0 relative group/title'>
@@ -618,7 +667,7 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
 
                           {/* 源名称和集数信息 - 垂直居中 */}
                           <div className='flex items-center justify-between'>
-                            <span className='text-xs px-2 py-1 border border-gray-500/60 rounded text-gray-700 dark:text-gray-300'>
+                            <span className='text-xs px-2 py-0.5 border border-gray-500/60 rounded text-gray-700 dark:text-gray-300 flex-shrink-0'>
                               {source.source_name}
                             </span>
                             {source.episodes.length > 1 && (
@@ -627,6 +676,36 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
                               </span>
                             )}
                           </div>
+
+                          {/* 源地址展示与一键复制 */}
+                          {(() => {
+                            const epUrl =
+                              source.episodes?.[value - 1] ||
+                              source.episodes?.[0] ||
+                              '';
+                            const isCopied = copiedUrl === epUrl && !!epUrl;
+                            if (!epUrl) return null;
+                            return (
+                              <div className='flex items-center gap-1.5 text-[10px] text-gray-500 dark:text-gray-400 font-mono overflow-hidden'>
+                                <span className='px-1 py-0.2 rounded bg-green-500/10 text-green-600 dark:text-green-400 text-[9px] flex-shrink-0'>
+                                  地址
+                                </span>
+                                <span
+                                  className='truncate hover:underline select-all cursor-text flex-1'
+                                  title={epUrl}
+                                >
+                                  {epUrl}
+                                </span>
+                                <button
+                                  onClick={(e) => handleCopyUrl(epUrl, e)}
+                                  className='px-1.5 py-0.5 rounded text-[9px] bg-black/5 hover:bg-black/10 dark:bg-white/10 dark:hover:bg-white/20 text-gray-600 dark:text-gray-300 transition-colors flex-shrink-0'
+                                  title='复制此源播放地址'
+                                >
+                                  {isCopied ? '已复制' : '复制'}
+                                </button>
+                              </div>
+                            );
+                          })()}
 
                           {/* 网络信息 - 底部 */}
                           <div className='flex items-end h-6'>

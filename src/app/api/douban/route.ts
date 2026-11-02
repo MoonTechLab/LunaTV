@@ -57,7 +57,9 @@ export async function GET(request: Request) {
     return handleTop250(pageStart);
   }
 
-  const target = `https://movie.douban.com/j/search_subjects?type=${type}&tag=${tag}&sort=recommend&page_limit=${pageSize}&page_start=${pageStart}`;
+  const target = resolveDoubanUrl(
+    `https://movie.douban.com/j/search_subjects?type=${type}&tag=${tag}&sort=recommend&page_limit=${pageSize}&page_start=${pageStart}`
+  );
 
   try {
     // 调用豆瓣 API
@@ -96,7 +98,9 @@ export async function GET(request: Request) {
 }
 
 function handleTop250(pageStart: number) {
-  const target = `https://movie.douban.com/top250?start=${pageStart}&filter=`;
+  const target = resolveDoubanUrl(
+    `https://movie.douban.com/top250?start=${pageStart}&filter=`
+  );
 
   // 直接使用 fetch 获取 HTML 页面
   const controller = new AbortController();
@@ -126,7 +130,7 @@ function handleTop250(pageStart: number) {
 
       // 通过正则同时捕获影片 id、标题、封面以及评分
       const moviePattern =
-        /<div class="item">[\s\S]*?<a[^>]+href="https?:\/\/movie\.douban\.com\/subject\/(\d+)\/"[\s\S]*?<img[^>]+alt="([^"]+)"[^>]*src="([^"]+)"[\s\S]*?<span class="rating_num"[^>]*>([^<]*)<\/span>[\s\S]*?<\/div>/g;
+        /<div class="item">[\s\S]*?<a[^>]+href="https?:\/\/movie\.douban\.com\/subject\/(\d+)\/"[\s\S]*?<img[^>]+alt="([^"]+)"[^>]*src="([^"]+)"[\s\S]*?<span class="rating_num"[^>]*>([^<]*)<\/spa/;
       const movies: DoubanItem[] = [];
       let match;
 

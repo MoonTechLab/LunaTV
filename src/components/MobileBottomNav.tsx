@@ -22,6 +22,7 @@ const MobileBottomNav = ({ activePath }: MobileBottomNavProps) => {
 
   const [navItems, setNavItems] = useState([
     { icon: Home, label: '首页', href: '/' },
+    { icon: Film, label: '浏览源', href: '/browse' },
     {
       icon: Film,
       label: '电影',

@@ -125,6 +125,7 @@ const Sidebar = ({ onToggle, activePath = '/' }: SidebarProps) => {
   };
 
   const [menuItems, setMenuItems] = useState([
+    { icon: Film, label: '浏览源', href: '/browse' },
     {
       icon: Film,
       label: '电影',
